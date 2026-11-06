@@ -1,6 +1,7 @@
 # TP1 Supervised Learning
 
-You can find this repository on [GitHub](https://github.com/Titiplex/basic-perceptron)
+You can find this repository on [GitHub](https://github.com/Titiplex/basic-perceptron-2)
+It is originally forked from [GitHub](https://github.com/Titiplex/basic-perceptron)
 
 ## Requirements
 
