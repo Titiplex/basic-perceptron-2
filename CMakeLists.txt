@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 4.2)
-project(TP1 LANGUAGES CXX)
+project(TP2 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -26,13 +26,17 @@ function(download url)
 
     FetchContent_Declare(sonar URL ${url})
     FetchContent_MakeAvailable(sonar)
+
+    set(SONAR_SOURCE "${sonar_SOURCE_DIR}" PARENT_SCOPE)
 endfunction()
 
 download(https://archive.ics.uci.edu/static/public/151/connectionist+bench+sonar+mines+vs+rocks.zip)
 
-add_executable(TP1 main.cpp)
+add_executable(TP2 main.cpp dataset.cpp)
 
-target_link_libraries(TP1
+target_compile_definitions(TP2 PRIVATE DATASET_DIR="${SONAR_SOURCE}")
+
+target_link_libraries(TP2
         PRIVATE
         matplot
         Threads::Threads
