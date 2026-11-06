@@ -9,7 +9,7 @@ class Perceptron
     std::vector<double> weights;
     float eta;
     double biais;
-    std::map<std::vector<int>, int> learn_data;
+    std::map<std::vector<double>, int> learn_data;
 
 public:
     enum LearningType
@@ -23,6 +23,11 @@ public:
         return this->weights;
     }
 
+    [[nodiscard]] double get_bias() const
+    {
+        return biais;
+    }
+
     Perceptron()
     {
         this->weights = {};
@@ -32,7 +37,7 @@ public:
     }
 
     Perceptron(const std::vector<double>& weights, const float eta, const double biais,
-               const std::map<std::vector<int>, int>& learn_data) :
+               const std::map<std::vector<double>, int>& learn_data) :
         learn_data(learn_data)
     {
         this->weights = weights;
@@ -49,7 +54,7 @@ public:
     }
 
     Perceptron(const int n, const float eta, const double biais,
-               const std::map<std::vector<int>, int>& learn_data) :
+               const std::map<std::vector<double>, int>& learn_data) :
         learn_data(learn_data)
     {
         std::vector<double> init(n);
@@ -83,9 +88,10 @@ public:
         this->learn_data = {};
     }
 
-    [[nodiscard]] int output(const std::vector<int>& input) const;
+    [[nodiscard]] int output(const std::vector<double>& input) const;
     [[nodiscard]] bool verify() const;
     std::size_t learn(LearningType type_, std::size_t max_epochs = 1000);
+    [[nodiscard]] double stability(const std::vector<double>& input, int target) const;
 
 private:
     std::size_t learn_incremental(std::size_t max_epochs);

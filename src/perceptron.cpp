@@ -12,7 +12,7 @@ int heaviside(const double x)
     return x < 0 ? -1 : 1;
 }
 
-double sum(const vector<double>& weights, const vector<int>& input)
+double sum(const vector<double>& weights, const vector<double>& input)
 {
     double sum = 0;
     for (int i = 0; i < weights.size(); i++)
@@ -38,7 +38,7 @@ bool equals(const vector<int>& a, const vector<int>& b)
 }
 
 
-int Perceptron::output(const vector<int>& input) const
+int Perceptron::output(const vector<double>& input) const
 {
     if (input.size() != this->weights.size())
     {
@@ -131,4 +131,29 @@ size_t Perceptron::learn(const LearningType type_, const size_t max_epochs)
     default:
         return learn_incremental(max_epochs);
     }
+}
+
+double Perceptron::stability(
+    const vector<double>& input,
+    const int target
+) const
+{
+    if (input.size() != weights.size())
+        throw invalid_argument("incorrect dimension");
+
+    if (target != -1 && target != 1)
+        throw invalid_argument("expected -1 or +1");
+
+    double score = biais;
+    double norm_squared = 0.0;
+
+    for (size_t j = 0; j < weights.size(); ++j)
+    {
+        score += weights[j] * input[j];
+        norm_squared += weights[j] * weights[j];
+    }
+
+    if (norm_squared == 0.0) throw runtime_error("undefined stability : weight norm is null");
+
+    return target * score / sqrt(norm_squared);
 }

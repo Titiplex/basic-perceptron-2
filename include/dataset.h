@@ -9,7 +9,7 @@
 #include <cmath>
 #include <filesystem>
 
-using Dataset = std::map<std::vector<int>, int>;
+using Dataset = std::map<std::vector<double>, int>;
 
 struct SonarDataset
 {
@@ -17,8 +17,6 @@ struct SonarDataset
     Dataset train;
     Dataset test;
 };
-
-constexpr int SONAR_SCALE = 10000;
 
 static void load_sonar_file(
     const std::string& filepath,
@@ -60,7 +58,7 @@ static void load_sonar_file(
             throw std::runtime_error("unfinished sonar bloc : " + filepath);
 
         std::istringstream values(block);
-        std::vector<int> features;
+        std::vector<double> features;
         features.reserve(60);
 
         for (size_t i = 0; i < 60; ++i)
@@ -75,8 +73,7 @@ static void load_sonar_file(
                     ", example " + std::to_string(count + 1));
             }
 
-            features.push_back(
-                static_cast<int>(lround(value * SONAR_SCALE)));
+            features.push_back(value);
         }
 
         values >> std::ws;
