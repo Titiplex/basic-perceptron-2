@@ -1,13 +1,15 @@
+#pragma once
+
 #include <fstream>
 #include <map>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <cmath>
+#include <filesystem>
 
-using namespace std;
-
-using Dataset = map<vector<int>, int>;
+using Dataset = std::map<std::vector<int>, int>;
 
 struct SonarDataset
 {
@@ -19,17 +21,19 @@ struct SonarDataset
 constexpr int SONAR_SCALE = 10000;
 
 static void load_sonar_file(
-    const string& filepath,
+    const std::string& filepath,
     int label,
     size_t expected_count,
-    SonarDataset& dataset)
+    SonarDataset& dataset
+)
 {
-    ifstream file(filepath);
+    const auto path = std::filesystem::u8path(filepath);
+    std::ifstream file(path);
 
     if (!file.is_open())
-        throw runtime_error("Cannot open : " + filepath);
+        throw std::runtime_error("Cannot open : " + filepath);
 
-    string prefix;
+    std::string prefix;
     size_t count = 0;
 
     while (getline(file, prefix, '{'))
@@ -39,24 +43,24 @@ static void load_sonar_file(
 
         const auto end = prefix.find_last_not_of(" \t\r\n");
 
-        if (end == string::npos || prefix[end] != ':')
-            throw runtime_error("invalid id : " + filepath);
+        if (end == std::string::npos || prefix[end] != ':')
+            throw std::runtime_error("invalid id : " + filepath);
 
         const auto line_start = prefix.find_last_of("\r\n", end);
-        const string identifier = prefix.substr(
-            line_start == string::npos ? 0 : line_start + 1);
+        const std::string identifier = prefix.substr(
+            line_start == std::string::npos ? 0 : line_start + 1);
 
         const auto first = identifier.find_first_not_of(" \t");
         const bool is_train =
-            first != string::npos && identifier[first] == '*';
+            first != std::string::npos && identifier[first] == '*';
 
-        string block;
+        std::string block;
 
         if (!getline(file, block, '}') || file.eof())
-            throw runtime_error("unfinished sonar bloc : " + filepath);
+            throw std::runtime_error("unfinished sonar bloc : " + filepath);
 
-        istringstream values(block);
-        vector<int> features;
+        std::istringstream values(block);
+        std::vector<int> features;
         features.reserve(60);
 
         for (size_t i = 0; i < 60; ++i)
@@ -64,25 +68,25 @@ static void load_sonar_file(
             double value;
 
             if (!(values >> value) ||
-                !isfinite(value) || value < 0.0 || value > 1.0)
+                !std::isfinite(value) || value < 0.0 || value > 1.0)
             {
-                throw runtime_error(
+                throw std::runtime_error(
                     "invalid sonar value " + filepath +
-                    ", example " + to_string(count + 1));
+                    ", example " + std::to_string(count + 1));
             }
 
             features.push_back(
                 static_cast<int>(lround(value * SONAR_SCALE)));
         }
 
-        values >> ws;
+        values >> std::ws;
 
         if (!values.eof())
-            throw runtime_error(
+            throw std::runtime_error(
                 "more than 60 values in an example : " + filepath);
 
         if (!dataset.complete.emplace(features, label).second)
-            throw runtime_error(
+            throw std::runtime_error(
                 "duplicated vector after conversion : " + filepath);
 
         Dataset& subset = is_train ? dataset.train : dataset.test;
@@ -92,16 +96,16 @@ static void load_sonar_file(
     }
 
     if (file.bad())
-        throw runtime_error("reading error : " + filepath);
+        throw std::runtime_error("reading error : " + filepath);
 
     if (count != expected_count)
-        throw runtime_error(
+        throw std::runtime_error(
             "incorrect number of examples in " + filepath +
-            " : " + to_string(count) +
-            ", expected : " + to_string(expected_count));
+            " : " + std::to_string(count) +
+            ", expected : " + std::to_string(expected_count));
 }
 
-SonarDataset get_dataset()
+inline SonarDataset get_dataset()
 {
     SonarDataset dataset;
 

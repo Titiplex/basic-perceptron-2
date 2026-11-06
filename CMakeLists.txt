@@ -32,9 +32,12 @@ endfunction()
 
 download(https://archive.ics.uci.edu/static/public/151/connectionist+bench+sonar+mines+vs+rocks.zip)
 
-add_executable(TP2 main.cpp dataset.cpp)
+add_executable(TP2 main.cpp src/perceptron.cpp)
+
+include_directories(TP2 include)
 
 target_compile_definitions(TP2 PRIVATE DATASET_DIR="${SONAR_SOURCE}")
+target_compile_features(TP2 PRIVATE cxx_std_17)
 
 target_link_libraries(TP2
         PRIVATE
