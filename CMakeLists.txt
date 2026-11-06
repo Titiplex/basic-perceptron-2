@@ -22,6 +22,14 @@ FetchContent_MakeAvailable(matplotplusplus)
 
 find_package(Threads REQUIRED)
 
+function(download url)
+
+    FetchContent_Declare(sonar URL ${url})
+    FetchContent_MakeAvailable(sonar)
+endfunction()
+
+download(https://archive.ics.uci.edu/static/public/151/connectionist+bench+sonar+mines+vs+rocks.zip)
+
 add_executable(TP1 main.cpp)
 
 target_link_libraries(TP1
