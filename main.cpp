@@ -20,32 +20,13 @@ double error_rate(const Perceptron& model, const Dataset& data)
     return static_cast<double>(errors) / static_cast<double>(data.size());
 }
 
-int main()
+void draw_stability(
+    const Dataset& test_data,
+    const Dataset& learn_data,
+    const Perceptron& perceptron,
+    const string& filename
+    )
 {
-    const SonarDataset sonar = get_dataset();
-
-    const Dataset& learn_data = sonar.train;
-    const Dataset& test_data = sonar.test;
-    const Dataset& all_data = sonar.complete;
-
-    // permet de vérifier que les datasets sont loaded correctement
-    cout << "Train   : " << learn_data.size() << '\n';
-    cout << "Test    : " << test_data.size() << '\n';
-    cout << "Complet : " << all_data.size() << '\n';
-
-    // on train sur cpu pour l'instant car pas encore merge la branche de gpu
-
-    Perceptron perceptron(60, 0.6, 1.0, learn_data); // dimension 60
-    const auto epochs = perceptron.learn(Perceptron::ONLINE, 10000);
-
-    if (epochs == static_cast<size_t>(-1))
-        cout << "Limite de 10000 epoques atteinte sans convergence.\n";
-    else
-        cout << "Convergence apres " << epochs << " epoques.\n";
-    cout << "Ea = " << 100.0 * error_rate(perceptron, learn_data) << endl;
-    cout << "Eg = " << 100.0 * error_rate(perceptron, test_data) << endl;
-
-
     vector<double> indices;
     vector<double> gammas;
 
@@ -146,7 +127,7 @@ int main()
         matplot::figure();
         matplot::hold(matplot::on);
 
-        // Couleur = classe ; symbole = ensemble.
+        // Couleur = classe et symbole = ensemble.
         matplot::plot(train_mines.indices, train_mines.distances, "bo");
         matplot::plot(train_rocks.indices, train_rocks.distances, "ro");
         matplot::plot(test_mines.indices, test_mines.distances, "bx");
@@ -185,6 +166,48 @@ int main()
         matplot::grid(matplot::on);
 
         matplot::hold(matplot::off);
-        matplot::save("stability.png");
+        matplot::save(filename);
     }
+}
+
+int main()
+{
+    const SonarDataset sonar = get_dataset();
+
+    const Dataset& learn_data = sonar.train;
+    const Dataset& test_data = sonar.test;
+    const Dataset& all_data = sonar.complete;
+
+    // permet de vérifier que les datasets sont loaded correctement
+    cout << "Train   : " << learn_data.size() << '\n';
+    cout << "Test    : " << test_data.size() << '\n';
+    cout << "Complet : " << all_data.size() << '\n';
+
+    // on train sur cpu pour l'instant car pas encore merge la branche de gpu
+
+    Perceptron perceptron(60, 0.6, 1.0, learn_data); // dimension 60
+    const auto epochs = perceptron.learn(Perceptron::ONLINE, 10000);
+
+    if (epochs == static_cast<size_t>(-1))
+        cout << "Limite de 10000 epoques atteinte sans convergence." << endl;
+    else
+        cout << "Convergence apres " << epochs << " epoques." << endl;
+    cout << "Ea = " << 100.0 * error_rate(perceptron, learn_data) << endl;
+    cout << "Eg = " << 100.0 * error_rate(perceptron, test_data) << endl;
+
+    // draw stability graph
+    draw_stability(test_data, learn_data, perceptron, "normal.png");
+
+    cout << "Inversion de learn et test" << endl;
+
+    // all the same but reversed
+    Perceptron perceptron2(60, 0.6, 1.0, test_data);
+    const auto epochs2 = perceptron2.learn(Perceptron::ONLINE, 10000);
+    if (epochs2 == static_cast<size_t>(-1))
+        cout << "Limite de 10000 epoques atteinte sans convergence." << endl;
+    else
+        cout << "Convergence apres " << epochs2 << " epoques." << endl;
+    cout << "Ea = " << 100.0 * error_rate(perceptron2, test_data) << endl;
+    cout << "Eg = " << 100.0 * error_rate(perceptron2, learn_data) << endl;
+    draw_stability(learn_data, test_data, perceptron2, "reversed.png");
 }
