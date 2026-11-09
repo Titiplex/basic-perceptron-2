@@ -4,7 +4,7 @@
 
 #include "dataset.h"
 #include "perceptron.h"
-
+#include "pocket.h"
 using namespace std;
 
 double error_rate(const Perceptron& model, const Dataset& data)
@@ -25,7 +25,7 @@ void draw_stability(
     const Dataset& learn_data,
     const Perceptron& perceptron,
     const string& filename
-    )
+)
 {
     vector<double> indices;
     vector<double> gammas;
@@ -210,4 +210,31 @@ int main()
     cout << "Ea = " << 100.0 * error_rate(perceptron2, test_data) << endl;
     cout << "Eg = " << 100.0 * error_rate(perceptron2, learn_data) << endl;
     draw_stability(learn_data, test_data, perceptron2, "reversed.png");
+
+    // pocket algorithm
+    pocket::Options options;
+    options.max_epochs = 10000;
+    options.max_errors = 5;
+    options.seed = 42;
+    options.eta = 0.6;
+
+    for (const auto init : {pocket::Initialization::Random, pocket::Initialization::Hebb})
+    {
+        const auto result = pocket::fit(learn_data, init, options);
+
+        const size_t errors_a = pocket::error_count(result.best, learn_data);
+        const size_t errors_g = pocket::error_count(result.best, test_data);
+
+        const double Ea = 100.0 * static_cast<double>(errors_a) / static_cast<double>(learn_data.size());
+        const double Eg = 100.0 * static_cast<double>(errors_g) / static_cast<double>(test_data.size());
+
+        cout << (init == pocket::Initialization::Random ? "Random" : "Hebb") << '\t'
+            << errors_a << '/' << learn_data.size() << '\t'
+            << Ea << '\t'
+            << Eg << '\t'
+            << result.epochs_started << '\t'
+            << result.updates << '\t'
+            << (result.target_reached ? "oui" : "non")
+            << endl;
+    }
 }
