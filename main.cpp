@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <random>
 #include <utility>
+#include <fstream>
 
 #include "dataset.h"
 #include "perceptron.h"
@@ -22,6 +23,23 @@ double error_rate(const Perceptron& model, const Dataset& data)
             ++errors;
 
     return static_cast<double>(errors) / static_cast<double>(data.size());
+}
+
+void print_weights(ostream& out, const vector<double>& weights, const double bias)
+{
+    out << "b = " << bias << endl;
+    for (size_t j = 0; j < weights.size(); ++j)
+        out << "w" << j + 1 << " = " << weights[j] << endl;
+}
+
+template <class Model>
+void print_stabilities(ostream& out, const Model& model, const Dataset& data)
+{
+    out << "Exemple\tClasse\tPrediction\tStabilite" << endl;
+    size_t index = 0;
+    for (const auto& [x, target] : data)
+        out << ++index << '\t' << target << '\t' << model.output(x)
+            << '\t' << model.stability(x, target) << endl;
 }
 
 void draw_stability(
@@ -172,19 +190,30 @@ void draw_stability(
         matplot::hold(matplot::off);
         matplot::save(filename);
     }
+
+    matplot::figure();
+    matplot::hold(matplot::on);
+    matplot::plot(indices, gammas, "bo");
+    matplot::plot(vector{0.0, static_cast<double>(test_data.size()) + 1.0},
+                  vector{0.0, 0.0}, "k--");
+    matplot::xlabel("Exemple");
+    matplot::ylabel("Stabilite gamma = tau * (w.x + b) / ||w||");
+    matplot::grid(matplot::on);
+    matplot::hold(matplot::off);
+    matplot::save("stabilites_" + filename);
 }
 
-void validate_epochs(const SonarDataset& sonar, const size_t epochs, const Perceptron& perceptron)
+void validate_epochs(const Dataset& learn, const Dataset& test, const size_t epochs, const Perceptron& perceptron)
 {
     if (epochs == static_cast<size_t>(-1))
         cout << "Limite de 10000 epoques atteinte sans convergence." << endl;
     else
         cout << "Convergence apres " << epochs << " epoques." << endl;
-    cout << "Ea = " << 100.0 * error_rate(perceptron, sonar.train) << endl;
-    cout << "Eg = " << 100.0 * error_rate(perceptron, sonar.test) << endl;
+    cout << "Ea = " << 100.0 * error_rate(perceptron, learn) << endl;
+    cout << "Eg = " << 100.0 * error_rate(perceptron, test) << endl;
 }
 
-void experiment_early_stopping(const Dataset& complete)
+void experiment_early_stopping(const Dataset& complete, ostream& details)
 {
     if (complete.size() != 208)
         throw invalid_argument("208 exemples attendus");
@@ -205,7 +234,8 @@ void experiment_early_stopping(const Dataset& complete)
     double sum_Et = 0.0;
 
     cout << fixed << setprecision(2);
-    cout << endl << "Essai\tEpoque retenue\tEa (%)\tEv (%)\tEt (%)" << endl;
+    cout << endl << left << setw(8) << "Essai" << setw(18) << "Epoque retenue"
+        << setw(12) << "Ea (%)" << setw(12) << "Ev (%)" << setw(12) << "Et (%)" << endl;
 
     for (size_t run = 1; run <= repetitions; ++run)
     {
@@ -254,11 +284,16 @@ void experiment_early_stopping(const Dataset& complete)
         sum_Ev += Ev;
         sum_Et += Et;
 
-        cout << run << '\t'
-            << best_epoch << '\t'
-            << Ea << '\t'
-            << Ev << '\t'
-            << Et << endl;
+        cout << left << setw(8) << run << setw(18) << best_epoch << setw(12) << Ea << setw(12) << Ev << setw(12) << Et
+            << endl;
+        details << endl << "Early stopping, essai " << run << ", epoque retenue " << best_epoch << endl;
+        print_weights(details, best.get_weights(), best.get_bias());
+        details << "LA" << endl;
+        print_stabilities(details, best, LA);
+        details << "LV" << endl;
+        print_stabilities(details, best, LV);
+        details << "LT" << endl;
+        print_stabilities(details, best, LT);
     }
 
     cout << endl << "Moyenne sur " << repetitions << " essais :" << endl;
@@ -270,6 +305,9 @@ void experiment_early_stopping(const Dataset& complete)
 int main()
 {
     const SonarDataset sonar = get_dataset();
+    ofstream details("details.txt");
+    if (!details) throw runtime_error("Impossible de creer details.txt");
+    details << setprecision(17);
 
     const Dataset& learn_data = sonar.train;
     const Dataset& test_data = sonar.test;
@@ -285,7 +323,10 @@ int main()
     Perceptron perceptron(60, 0.6, 1.0, learn_data); // dimension 60
     const auto epochs = perceptron.learn(Perceptron::ONLINE, 10000);
 
-    validate_epochs(sonar, epochs, perceptron);
+    validate_epochs(learn_data, test_data, epochs, perceptron);
+    details << endl << "Perceptron : train -> test" << endl;
+    print_weights(details, perceptron.get_weights(), perceptron.get_bias());
+    print_stabilities(details, perceptron, test_data);
 
     // draw stability graph
     draw_stability(test_data, learn_data, perceptron, "normal.png");
@@ -295,7 +336,10 @@ int main()
     // all the same but reversed
     Perceptron perceptron2(60, 0.6, 1.0, test_data);
     const auto epochs2 = perceptron2.learn(Perceptron::ONLINE, 10000);
-    validate_epochs(sonar, epochs2, perceptron2);
+    validate_epochs(test_data, learn_data, epochs2, perceptron2);
+    details << endl << "Perceptron : test -> train" << endl;
+    print_weights(details, perceptron2.get_weights(), perceptron2.get_bias());
+    print_stabilities(details, perceptron2, learn_data);
     draw_stability(learn_data, test_data, perceptron2, "reversed.png");
 
     // pocket algorithm
@@ -305,24 +349,41 @@ int main()
     options.seed = 42;
     options.eta = 0.6;
 
-    for (const auto init : {pocket::Initialization::Random, pocket::Initialization::Hebb})
+    cout << endl << "Appr.\tEta\tInit\tErreurs Ea\tEa (%)\tEg (%)\tEpoques\tCorrections\tSeuil atteint" << endl;
+    for (const bool inverse : {false, true})
     {
-        const auto result = pocket::fit(learn_data, init, options);
+        const Dataset& learn = inverse ? test_data : learn_data;
+        const Dataset& test = inverse ? learn_data : test_data;
+        for (const double eta : {0.01, 0.1, 0.6})
+        {
+            for (const auto init : {pocket::Initialization::Random, pocket::Initialization::Hebb})
+            {
+                options.eta = eta;
+                const auto result = pocket::fit(learn, init, options);
 
-        const size_t errors_a = pocket::error_count(result.best, learn_data);
-        const size_t errors_g = pocket::error_count(result.best, test_data);
+                const size_t errors_a = pocket::error_count(result.best, learn);
+                const size_t errors_g = pocket::error_count(result.best, test);
 
-        const double Ea = 100.0 * static_cast<double>(errors_a) / static_cast<double>(learn_data.size());
-        const double Eg = 100.0 * static_cast<double>(errors_g) / static_cast<double>(test_data.size());
+                const double Ea = 100.0 * static_cast<double>(errors_a) / static_cast<double>(learn.size());
+                const double Eg = 100.0 * static_cast<double>(errors_g) / static_cast<double>(test.size());
 
-        cout << (init == pocket::Initialization::Random ? "Random" : "Hebb") << '\t'
-            << errors_a << '/' << learn_data.size() << '\t'
-            << Ea << '\t'
-            << Eg << '\t'
-            << result.epochs_started << '\t'
-            << result.updates << '\t'
-            << (result.target_reached ? "oui" : "non")
-            << endl;
+                cout << (inverse ? "test" : "train") << '\t' << eta << '\t'
+                    << (init == pocket::Initialization::Random ? "Random" : "Hebb") << '\t'
+                    << errors_a << '/' << learn.size() << '\t'
+                    << Ea << '\t'
+                    << Eg << '\t'
+                    << result.epochs_started << '\t'
+                    << result.updates << '\t'
+                    << (result.target_reached ? "oui" : "non")
+                    << endl;
+                details << endl << "Pocket " << (inverse ? "test -> train" : "train -> test")
+                    << " ; eta=" << eta << " ; "
+                    << (init == pocket::Initialization::Random ? "Random" : "Hebb") << endl;
+                print_weights(details, vector<double>(result.best.W.begin() + 1, result.best.W.end()),
+                              result.best.W[0]);
+                print_stabilities(details, result.best, test);
+            }
+        }
     }
 
     // part 3 learn on the whole set (learn + test)
@@ -336,6 +397,13 @@ int main()
         cout << "Convergence apres " << epochs_full << " epoques." << endl;
     cout << "Ea = " << 100.0 * error_rate(perceptron_full, all_data) << endl;
 
+    if (epochs_full == static_cast<size_t>(-1)) cout << "Aucune separation parfaite trouvee" << endl;
+
+    details << endl << "Perceptron : ensemble complet" << endl;
+    print_weights(details, perceptron_full.get_weights(), perceptron_full.get_bias());
+    print_stabilities(details, perceptron_full, all_data);
+
     // part 4
-    experiment_early_stopping(all_data);
+    experiment_early_stopping(all_data, details);
+    cout << "Poids et stabilites : details.txt" << endl;
 }
