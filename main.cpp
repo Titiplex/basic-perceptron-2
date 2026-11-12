@@ -1,6 +1,10 @@
 #include <iostream>
 #include <matplot/matplot.h>
 #include <vector>
+#include <algorithm>
+#include <iomanip>
+#include <random>
+#include <utility>
 
 #include "dataset.h"
 #include "perceptron.h"
@@ -170,6 +174,99 @@ void draw_stability(
     }
 }
 
+void validate_epochs(const SonarDataset& sonar, const size_t epochs, const Perceptron& perceptron)
+{
+    if (epochs == static_cast<size_t>(-1))
+        cout << "Limite de 10000 epoques atteinte sans convergence." << endl;
+    else
+        cout << "Convergence apres " << epochs << " epoques." << endl;
+    cout << "Ea = " << 100.0 * error_rate(perceptron, sonar.train) << endl;
+    cout << "Eg = " << 100.0 * error_rate(perceptron, sonar.test) << endl;
+}
+
+void experiment_early_stopping(const Dataset& complete)
+{
+    if (complete.size() != 208)
+        throw invalid_argument("208 exemples attendus");
+
+    vector<pair<vector<double>, int>> examples(
+        complete.begin(), complete.end()
+    );
+
+    constexpr size_t repetitions = 20;
+    constexpr size_t max_epochs = 10000;
+    constexpr size_t patience = 50;
+
+    mt19937 rng(42);
+    uniform_real_distribution distribution(-1.0, 1.0);
+
+    double sum_Ea = 0.0;
+    double sum_Ev = 0.0;
+    double sum_Et = 0.0;
+
+    cout << fixed << setprecision(2);
+    cout << endl << "Essai\tEpoque retenue\tEa (%)\tEv (%)\tEt (%)" << endl;
+
+    for (size_t run = 1; run <= repetitions; ++run)
+    {
+        ranges::shuffle(examples, rng);
+
+        const Dataset LA(examples.begin(), examples.begin() + 104);
+        const Dataset LV(examples.begin() + 104, examples.begin() + 146);
+        const Dataset LT(examples.begin() + 146, examples.end());
+
+        vector<double> weights(examples.front().first.size());
+        for (double& w : weights) w = distribution(rng);
+
+        Perceptron model(weights, 0.6f, 1.0, LA);
+
+        Perceptron best = model;
+        double best_Ev = error_rate(model, LV);
+        size_t best_epoch = 0;
+        size_t without_improvement = 0;
+
+        for (size_t epoch = 1; epoch <= max_epochs; ++epoch)
+        {
+            model.learn(Perceptron::ONLINE, 1);
+
+            const double Ev = error_rate(model, LV);
+
+            if (Ev < best_Ev)
+            {
+                best = model;
+                best_Ev = Ev;
+                best_epoch = epoch;
+                without_improvement = 0;
+            }
+            else
+            {
+                ++without_improvement;
+            }
+
+            if (without_improvement >= patience || model.verify()) break;
+        }
+
+        const double Ea = 100.0 * error_rate(best, LA);
+        const double Ev = 100.0 * error_rate(best, LV);
+        const double Et = 100.0 * error_rate(best, LT);
+
+        sum_Ea += Ea;
+        sum_Ev += Ev;
+        sum_Et += Et;
+
+        cout << run << '\t'
+            << best_epoch << '\t'
+            << Ea << '\t'
+            << Ev << '\t'
+            << Et << endl;
+    }
+
+    cout << endl << "Moyenne sur " << repetitions << " essais :" << endl;
+    cout << "Ea = " << sum_Ea / repetitions << endl;
+    cout << "Ev = " << sum_Ev / repetitions << endl;
+    cout << "Et = " << sum_Et / repetitions << endl;
+}
+
 int main()
 {
     const SonarDataset sonar = get_dataset();
@@ -179,21 +276,16 @@ int main()
     const Dataset& all_data = sonar.complete;
 
     // permet de vérifier que les datasets sont loaded correctement
-    cout << "Train   : " << learn_data.size() << '\n';
-    cout << "Test    : " << test_data.size() << '\n';
-    cout << "Complet : " << all_data.size() << '\n';
+    cout << "Train   : " << learn_data.size() << endl;
+    cout << "Test    : " << test_data.size() << endl;
+    cout << "Complet : " << all_data.size() << endl;
 
     // on train sur cpu pour l'instant car pas encore merge la branche de gpu
 
     Perceptron perceptron(60, 0.6, 1.0, learn_data); // dimension 60
     const auto epochs = perceptron.learn(Perceptron::ONLINE, 10000);
 
-    if (epochs == static_cast<size_t>(-1))
-        cout << "Limite de 10000 epoques atteinte sans convergence." << endl;
-    else
-        cout << "Convergence apres " << epochs << " epoques." << endl;
-    cout << "Ea = " << 100.0 * error_rate(perceptron, learn_data) << endl;
-    cout << "Eg = " << 100.0 * error_rate(perceptron, test_data) << endl;
+    validate_epochs(sonar, epochs, perceptron);
 
     // draw stability graph
     draw_stability(test_data, learn_data, perceptron, "normal.png");
@@ -203,12 +295,7 @@ int main()
     // all the same but reversed
     Perceptron perceptron2(60, 0.6, 1.0, test_data);
     const auto epochs2 = perceptron2.learn(Perceptron::ONLINE, 10000);
-    if (epochs2 == static_cast<size_t>(-1))
-        cout << "Limite de 10000 epoques atteinte sans convergence." << endl;
-    else
-        cout << "Convergence apres " << epochs2 << " epoques." << endl;
-    cout << "Ea = " << 100.0 * error_rate(perceptron2, test_data) << endl;
-    cout << "Eg = " << 100.0 * error_rate(perceptron2, learn_data) << endl;
+    validate_epochs(sonar, epochs2, perceptron2);
     draw_stability(learn_data, test_data, perceptron2, "reversed.png");
 
     // pocket algorithm
@@ -237,4 +324,18 @@ int main()
             << (result.target_reached ? "oui" : "non")
             << endl;
     }
+
+    // part 3 learn on the whole set (learn + test)
+    Perceptron perceptron_full(60, 0.6, 1.0, all_data); // dimension 60
+    const auto epochs_full = perceptron_full.learn(Perceptron::ONLINE, 10000);
+
+    if (epochs_full == static_cast<size_t>(-1))
+        cout << "Limite de 10000 epoques atteinte sans convergence." << endl;
+
+    else
+        cout << "Convergence apres " << epochs_full << " epoques." << endl;
+    cout << "Ea = " << 100.0 * error_rate(perceptron_full, all_data) << endl;
+
+    // part 4
+    experiment_early_stopping(all_data);
 }
